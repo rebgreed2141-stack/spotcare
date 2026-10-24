@@ -89,3 +89,9 @@ header b{color:#ed4178;font-size:24px}
 .steps .step.step-clickable{cursor:pointer;transition:filter .15s ease,transform .15s ease}
 .steps .step.step-clickable:hover{filter:brightness(.97);transform:translateY(-1px)}
 .steps .step.step-clickable:focus-visible{outline:3px solid #216fd1;outline-offset:3px}
+
+/* サーバー送信・バックアップ（管理画面） */
+.sync-actions{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin:16px 0}
+.sync-actions button:disabled{opacity:.55;cursor:wait}
+.tabs{flex-wrap:wrap}
+@media(max-width:650px){.tabs .tab{flex:1 1 auto;padding:12px 10px}.sync-actions button{flex:1 1 180px}}

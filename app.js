@@ -1,5 +1,31 @@
 'use strict';
-const API='/api/spotcare';const app=document.getElementById('app');let records=[],mode='home',step=0,editId=null,calendarDate=new Date(),reachedFinalStep=false;
+// ヒヤリハットと同じ構造：申込は端末内へ保存し、管理画面から明示的にサーバーへ送信する。
+const STORAGE_KEY='spotcare_records_v1';
+const SERVER_URL_KEY='spotcare_server_url';
+const DEFAULT_SERVER_URL='http://192.168.1.60:3000';
+const app=document.getElementById('app');let records=[],mode='home',step=0,editId=null,calendarDate=new Date(),reachedFinalStep=false;
+
+function loadLocalRecords(){
+  const raw=localStorage.getItem(STORAGE_KEY);
+  if(raw===null)return [];
+  const value=JSON.parse(raw); // 破損データを空として上書きしない
+  if(!Array.isArray(value))throw new Error('端末の保存データの形式が正しくありません。');
+  return value;
+}
+function saveLocalRecords(items){
+  localStorage.setItem(STORAGE_KEY,JSON.stringify(items)); // 容量超過時は例外を出し、成功と表示しない
+}
+function makeId(){
+  if(typeof crypto!=='undefined'&&typeof crypto.randomUUID==='function')return crypto.randomUUID();
+  const bytes=new Uint8Array(16);
+  if(typeof crypto!=='undefined'&&typeof crypto.getRandomValues==='function')crypto.getRandomValues(bytes);
+  else for(let i=0;i<bytes.length;i++)bytes[i]=Math.floor(Math.random()*256);
+  bytes[6]=(bytes[6]&15)|64;bytes[8]=(bytes[8]&63)|128;
+  const h=[...bytes].map(b=>b.toString(16).padStart(2,'0')).join('');
+  return `${h.slice(0,8)}-${h.slice(8,12)}-${h.slice(12,16)}-${h.slice(16,20)}-${h.slice(20)}`;
+}
+function serverURL(){return (localStorage.getItem(SERVER_URL_KEY)||DEFAULT_SERVER_URL).trim().replace(/\/+$/,'');}
+
 const Q=[
  ['今までに入院をともなう病気、ケガをしたことがありますか？',['有りの場合、どういったものでしょうか？']],
  ['食物アレルギーなどはありますか？',['有りの場合、どういったものでしょうか？','具体的に食べられないものをお書きください。']],
@@ -116,10 +142,94 @@ function validationErrors(){
 }
 async function next(){capture();if(!reportErrors(validationErrors()))return;if(step<3){step++;if(step===3)reachedFinalStep=true;form();return}confirmForm();}
 function confirmForm(){mount(`<div class="form-shell confirm-page"><div class="form-heading"><h2>入力内容の確認</h2><p>内容をご確認のうえ、保存してください。</p></div><div class="form-content"><h3>お子さまの情報</h3><p>${esc(data.child.name)}（${esc(data.child.kana)}）　${esc(age(data.child.birth,data.child.received))}</p><p>生年月日：${esc(data.child.birth)}　家庭での呼び方：${esc(data.child.nickname)}</p><h3>利用希望の内容</h3><p>${(data.care.dates||[]).map(esc).join('、')}</p><p>${esc(careLabel(data.care.plan))}　${esc(data.care.startTime||PLAN_LIMITS[data.care.plan]?.[0]||'')}～${esc(data.care.endTime||PLAN_LIMITS[data.care.plan]?.[1]||'')}　利用理由：${esc(data.care.reason)}</p><h3>健康状態・アンケート</h3>${Q.map((q,i)=>`<p>${i+1}. ${esc(q[0])}　<strong>${esc(data.survey[i].answer)}</strong>${data.survey[i].answer==='あり'?'　'+data.survey[i].details.map(esc).join(' / '):''}</p>`).join('')}<h3>保護者の情報</h3><p>${esc(data.guardian.name)}（${esc(data.guardian.relation)}）　${esc(data.guardian.phone)}</p><p>〒${esc(data.guardian.postal)}　${esc(data.guardian.address)}</p><h3>緊急連絡先</h3>${data.guardian.contacts.map((c,i)=>`<p>${i+1}. ${esc(c.name)}　${esc(c.relation)}　${esc(c.phone)}</p>`).join('')}<p id="error" class="error" role="alert"></p><div class="actions"><button class="secondary" id="back">← 修正する</button><button class="primary" id="next">${editId?'変更を保存':'この内容で申し込む'}</button></div></div></div>`);document.getElementById('back').onclick=()=>form();document.getElementById('next').onclick=saveApplication;}
-async function saveApplication(){let btn=document.getElementById('next');btn.disabled=true;try{let response=await fetch(API,{method:editId?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...data,...(editId?{id:editId}:{})})});let result=await response.json();if(!response.ok||!result.ok)throw Error(result.message||'保存できませんでした');mount(`<div class="card hero"><h1>✓ ${editId?'変更を保存しました':'お申し込みを受け付けました'}</h1><p>受付番号：${esc(result.id)}</p><button class="primary" id="finish">${editId?'申込一覧へ':'メイン画面へ'}</button></div>`);document.getElementById('finish').onclick=()=>editId?admin('list'):home()}catch(e){document.getElementById('error').textContent=e.message;btn.disabled=false}}
-async function load(){let r=await fetch(API,{cache:'no-store'});if(!r.ok)throw Error('申込一覧を読み込めません');let j=await r.json();records=j.items||[]}
-async function admin(tab='list'){mode='admin';try{await load()}catch(e){mount(`<div class="card error">${esc(e.message)} <button onclick="location.reload()">再読み込み</button></div>`);return}drawAdmin(tab)}
-function drawAdmin(tab){mount(`<div class="tabs"><button id="listTab" class="tab ${tab==='list'?'active':''}">申込一覧</button><button id="calendarTab" class="tab ${tab==='calendar'?'active':''}">カレンダー</button></div><div id="panel"></div><div class="right"><button id="toHome" class="secondary small">メイン画面に戻る</button></div>`);document.getElementById('listTab').onclick=()=>drawAdmin('list');document.getElementById('calendarTab').onclick=()=>drawAdmin('calendar');document.getElementById('toHome').onclick=home;if(tab==='list')listView();else calendarView()}
+function saveApplication(){
+ const btn=document.getElementById('next');btn.disabled=true;
+ try{
+   const previous=loadLocalRecords();
+   const now=new Date().toISOString();
+   const existing=editId?previous.find(r=>r.id===editId):null;
+   if(editId&&!existing)throw new Error('編集対象の申込が見つかりません。');
+   const id=editId||makeId();
+   const item={...data,id,app:'spotcare',schemaVersion:1,
+     createdAt:existing?.createdAt||now,updatedAt:now};
+   const updated=editId?previous.map(r=>r.id===id?item:r):[...previous,item];
+   saveLocalRecords(updated);
+   mount(`<div class="card hero"><h1>✓ ${editId?'変更を端末に保存しました':'申込内容を端末に保存しました'}</h1><p>受付番号：${esc(id)}</p><p class="notice">サーバーへの送信はまだ行っていません。職員専用の管理画面から「サーバーに送信」を押してください。</p><button class="primary" id="finish">${editId?'申込一覧へ':'メイン画面へ'}</button></div>`);
+   document.getElementById('finish').onclick=()=>editId?admin('list'):home();
+ }catch(e){document.getElementById('error').textContent='端末への保存に失敗しました：'+e.message;btn.disabled=false;}
+}
+function admin(tab='list'){
+ mode='admin';
+ try{records=loadLocalRecords()}catch(e){mount(`<div class="card error">端末の保存データを読み込めません：${esc(e.message)}</div><button class="secondary" id="toHome">メイン画面に戻る</button>`);document.getElementById('toHome').onclick=home;return;}
+ drawAdmin(tab);
+}
+function drawAdmin(tab){
+ mount(`<div class="tabs"><button id="listTab" class="tab ${tab==='list'?'active':''}">申込一覧</button><button id="calendarTab" class="tab ${tab==='calendar'?'active':''}">カレンダー</button><button id="serverTab" class="tab ${tab==='server'?'active':''}">サーバー送信・管理</button></div><div id="panel"></div><div class="right"><button id="toHome" class="secondary small">メイン画面に戻る</button></div>`);
+ document.getElementById('listTab').onclick=()=>drawAdmin('list');
+ document.getElementById('calendarTab').onclick=()=>drawAdmin('calendar');
+ document.getElementById('serverTab').onclick=()=>drawAdmin('server');
+ document.getElementById('toHome').onclick=home;
+ if(tab==='list')listView();else if(tab==='calendar')calendarView();else serverView();
+}
+function serverView(){
+ document.getElementById('panel').innerHTML=`<div class="card"><h2>サーバー送信</h2>
+  <p>この端末に保存した <strong>${records.length}件</strong> の申込データを、園のサーバーへ送信します。</p>
+  <div class="field"><label for="serverUrl">園内PC URL</label><input type="url" id="serverUrl" value="${esc(serverURL())}" placeholder="http://192.168.1.60:3000"></div>
+  <div class="sync-actions"><button class="secondary" id="saveUrl">URLを保存</button><button class="primary" id="sendServer">サーバーに送信</button></div>
+  <p id="serverStatus" role="status" aria-live="polite" class="muted small">送信は自動では行われません。</p>
+  <p class="notice">送信すると、サーバーのSpot Care申込データがこの端末の一覧で置き換わります。別の端末の申込データにはご注意ください。</p>
+  </div><div class="card"><h2>データ保全</h2><p>端末内の申込一覧をJSONファイルとしてバックアップ・復元できます。</p>
+  <div class="sync-actions"><button class="secondary" id="backup">バックアップ</button><button class="secondary" id="restore">データ復元</button><input type="file" id="restoreFile" accept=".json,application/json" hidden></div>
+  </div>`;
+ const input=document.getElementById('serverUrl');
+ const normalized=()=>input.value.trim().replace(/\/+$/,'');
+ document.getElementById('saveUrl').onclick=()=>{
+   const url=normalized();if(!/^https?:\/\/[^/]+$/i.test(url)){alert('園内PC URLを正しく入力してください。');return;}
+   try{localStorage.setItem(SERVER_URL_KEY,url);input.value=url;document.getElementById('serverStatus').textContent='URLを保存しました。'}catch(e){alert('URLを保存できませんでした：'+e.message)}
+ };
+ document.getElementById('sendServer').onclick=async()=>{
+   const url=normalized();
+   if(!/^https?:\/\/[^/]+$/i.test(url)){alert('園内PC URLを正しく入力してください。');return;}
+   let items;
+   try{items=loadLocalRecords()}catch(e){alert('端末データを読み込めません：'+e.message);return;}
+   if(!items.length){alert('送信する申込データがありません。');return;}
+   if(!confirm(`${items.length}件の申込をサーバーに送信します。\nサーバー側のSpot Care申込一覧は、この端末の一覧で置き換わります。\nよろしいですか？`))return;
+   const button=document.getElementById('sendServer');button.disabled=true;
+   const status=document.getElementById('serverStatus');status.textContent='サーバーに送信しています…';
+   try{
+     const host=new URL(url).hostname.toLowerCase();
+     const space=host==='localhost'||host==='127.0.0.1'?'loopback':
+       (/^192\.168\.|^10\.|^172\.(1[6-9]|2[0-9]|3[01])\./.test(host)?'local':null);
+     const response=await fetch(`${url}/api/spotcare`,{method:'POST',headers:{'Content-Type':'application/json'},
+       ...(space?{targetAddressSpace:space}:{}),
+       body:JSON.stringify({app:'spotcare',savedAt:new Date().toISOString(),payload:items})});
+     const result=await response.json().catch(()=>({}));
+     if(!response.ok||result.ok!==true||result.mode!=='bulk'||result.count!==items.length)throw new Error(result.message||'サーバーの送信結果を確認できません。server.jsが更新されているか確認してください。');
+     localStorage.setItem(SERVER_URL_KEY,url);input.value=url;
+     status.textContent=`${items.length}件のサーバー保存が完了しました。`;
+   }catch(e){status.textContent='送信に失敗しました。端末の記録は残っています。';alert('サーバーに送信できませんでした。\n'+e.message+'\n園内PC URL、server.js、Chromeのローカルネットワークへのアクセス許可を確認してください。');}
+   finally{button.disabled=false;}
+ };
+ document.getElementById('backup').onclick=()=>{
+   try{
+     const items=loadLocalRecords();
+     const file=new Blob([JSON.stringify({app:'spotcare',exportedAt:new Date().toISOString(),payload:items},null,2)],{type:'application/json'});
+     const link=document.createElement('a');const url=URL.createObjectURL(file);
+     link.href=url;link.download=`spotcare-backup-${localDate(new Date())}.json`;document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),5000);
+   }catch(e){alert('バックアップできませんでした：'+e.message);}
+ };
+ document.getElementById('restore').onclick=()=>document.getElementById('restoreFile').click();
+ document.getElementById('restoreFile').onchange=async e=>{
+   const file=e.target.files?.[0];if(!file)return;
+   try{
+     const v=JSON.parse(await file.text());
+     if(v?.app!=='spotcare'||!Array.isArray(v.payload)||!v.payload.every(r=>r&&typeof r.id==='string'&&r.child&&r.care&&r.guardian&&Array.isArray(r.survey)))throw Error('Spot Careのバックアップではありません。');
+     if(!confirm(`バックアップの${v.payload.length}件で、この端末の申込一覧を置き換えます。よろしいですか？`))return;
+     saveLocalRecords(v.payload);records=loadLocalRecords();drawAdmin('server');
+     document.getElementById('serverStatus').textContent='端末に復元しました。サーバーにはまだ送信していません。';
+   }catch(err){alert('復元できませんでした：'+err.message)}finally{e.target.value='';}
+ };
+}
 function careLabel(v){return {full:'1日',am:'半日（午前）',pm:'半日（午後）'}[v]||v}
 function careDisplay(c){const p=PLAN_LIMITS[c.plan]||[];return careLabel(c.plan)+' '+(c.startTime||p[0]||'')+'～'+(c.endTime||p[1]||'')}
 function listView(){document.getElementById('panel').innerHTML=`<div class="card"><h2>申込一覧</h2><div class="toolbar"><input id="search" placeholder="園児名で検索"><label>利用希望日 <input type="date" id="filterdate"></label><button class="secondary" id="clear">条件クリア</button></div><div class="tablewrap"><table><thead><tr><th>受付日</th><th>利用希望日</th><th>園児名</th><th>年齢</th><th>利用時間</th><th>利用理由</th><th>操作</th></tr></thead><tbody id="rows"></tbody></table></div></div>`;let s=document.getElementById('search'),d=document.getElementById('filterdate');function render(){let items=records.flatMap(r=>(r.care.dates?.length?r.care.dates:[r.care.date]).map(date=>({...r,displayDate:date}))).filter(r=>(!s.value||r.child.name.includes(s.value)||r.child.kana.includes(s.value))&&(!d.value||r.displayDate===d.value)).sort((a,b)=>a.displayDate.localeCompare(b.displayDate));document.getElementById('rows').innerHTML=items.map(r=>`<tr><td>${esc(r.child.received)}</td><td>${esc(r.displayDate)}（${weekday(r.displayDate)}）</td><td>${esc(r.child.name)}</td><td>${esc(age(r.child.birth,r.child.received))}</td><td>${esc(careDisplay(r.care))}</td><td>${esc(r.care.reason||'')}</td><td><button class="secondary edit" data-id="${esc(r.id)}">編集</button></td></tr>`).join('')||'<tr><td colspan="7">該当する申込はありません</td></tr>';document.querySelectorAll('.edit').forEach(b=>b.onclick=()=>edit(b.dataset.id))}s.oninput=d.onchange=render;document.getElementById('clear').onclick=()=>{s.value='';d.value='';render()};render()}

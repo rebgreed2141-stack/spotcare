@@ -107,3 +107,9 @@ header b{color:#ed4178;font-size:24px}
 @media(max-width:480px){.info-header,.info-section{padding:18px 14px}.info-header h1{font-size:1.35rem}.info-actions button{width:100%}}
 
 .lunch-option{margin-top:14px;padding:10px 12px;background:#fff;border-radius:8px}.lunch-option label{display:flex;align-items:center;gap:9px;cursor:pointer;font-weight:600}.lunch-option input{width:20px;height:20px;flex:none;accent-color:#0875e9}
+
+/* 最終確認：同意後に保存可能 */
+.confirm-agreement{margin:28px 0 16px;padding:16px;border:1px solid #f4c7d5;border-radius:10px;background:#fff7fa}
+.confirm-agreement label{display:flex;align-items:center;gap:12px;cursor:pointer;font-weight:700;color:#26364b}
+.confirm-agreement input{width:22px;height:22px;flex:none;accent-color:#f43f7c}
+.confirm-page #next:disabled{opacity:.45;cursor:not-allowed}

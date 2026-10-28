@@ -95,3 +95,15 @@ header b{color:#ed4178;font-size:24px}
 .sync-actions button:disabled{opacity:.55;cursor:wait}
 .tabs{flex-wrap:wrap}
 @media(max-width:650px){.tabs .tab{flex:1 1 auto;padding:12px 10px}.sync-actions button{flex:1 1 180px}}
+
+/* 一時預かりについて */
+.home-info{display:block;margin:20px auto 12px;padding:14px 24px;font-size:1.05rem;max-width:90%;width:340px}
+.info-page{max-width:780px;margin:24px auto;padding:0 16px 40px;color:#334155}
+.info-header,.info-section{background:#fff;border-radius:20px;padding:24px;margin-bottom:18px;box-shadow:0 3px 16px rgba(0,0,0,.06)}
+.info-header{background:#fff7fa;text-align:center}.info-header h1{font-size:1.65rem;color:#d63370;margin:0 0 16px}.info-header p{line-height:1.8}
+.info-section h2{font-size:1.25rem;margin:0 0 18px;color:#277c68}.info-section p,.info-section li{line-height:1.9}.info-section ul{padding-left:1.5em}
+.info-table-wrap{overflow-x:auto}.info-fees{width:100%;border-collapse:collapse;text-align:center;min-width:340px}.info-fees th,.info-fees td{border:1px solid #e2e8f0;padding:12px 8px}.info-fees th{background:#e7f5ee}.info-fees tr:nth-child(even){background:#f8fafc}
+.info-note{background:#fff5e7;padding:10px 14px;border-radius:9px;margin-top:16px}.info-actions{display:flex;justify-content:center;gap:12px;flex-wrap:wrap;margin-top:24px}.info-actions button{padding:14px 20px}
+@media(max-width:480px){.info-header,.info-section{padding:18px 14px}.info-header h1{font-size:1.35rem}.info-actions button{width:100%}}
+
+.lunch-option{margin-top:14px;padding:10px 12px;background:#fff;border-radius:8px}.lunch-option label{display:flex;align-items:center;gap:9px;cursor:pointer;font-weight:600}.lunch-option input{width:20px;height:20px;flex:none;accent-color:#0875e9}

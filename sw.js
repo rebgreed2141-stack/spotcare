@@ -1,5 +1,5 @@
 // GitHub Pagesのリポジトリ配下でも動く、相対パスのオフラインUIキャッシュ
-const CACHE_NAME='spotcare-ui-v2';
+const CACHE_NAME='spotcare-ui-v4-lunch';
 const ASSETS=['./','./index.html','./style.css','./app.js','./icon-192.png','./icon-512.png','./manifest.webmanifest'];
 self.addEventListener('install',event=>{
  event.waitUntil(caches.open(CACHE_NAME).then(cache=>cache.addAll(ASSETS)).then(()=>self.skipWaiting()));
